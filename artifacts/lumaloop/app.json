@@ -1,0 +1,48 @@
+{
+  "expo": {
+    "name": "LumaLoop",
+    "slug": "lumaloop",
+    "version": "1.0.8",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "lumaloop",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/images/icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#f8f1e7"
+    },
+    "ios": {
+      "supportsTablet": false
+    },
+    "android": {
+      "package": "com.lumaloop.app",
+      "versionCode": 9
+    },
+    "web": {
+      "favicon": "./assets/images/icon.png"
+    },
+    "plugins": [
+      [
+        "expo-router",
+        {
+          "origin": "https://replit.com/"
+        }
+      ],
+      "expo-font",
+      "expo-web-browser",
+      "./plugins/withDirectApkUpdates"
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "41083b9e-0f3f-474b-abad-6d1412135b3d"
+      }
+    },
+    "owner": "stanikzai52"
+  }
+}

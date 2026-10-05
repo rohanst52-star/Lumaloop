@@ -1,0 +1,12 @@
+{
+  "platform": "android",
+  "packageName": "com.lumaloop.app",
+  "version": "1.0.8",
+  "versionCode": 9,
+  "apkUrl": "https://expo.dev/artifacts/eas/5ueF7mkZGbXr61ySWsn5w9t1ZX4ys6Bl3NoKzxr6yJg.apk",
+  "releaseNotes": "Separates the Profile account menu from View profile, keeping listings and reviews on the dedicated profile detail page.",
+  "mandatory": false,
+  "sha256": "a9020fe59ce9c976679930ef631557d17655a8b139e6da0136219171d1e9f8a0",
+  "sizeBytes": 112804616,
+  "publishedAt": "2026-09-01T10:56:34.235Z"
+}
