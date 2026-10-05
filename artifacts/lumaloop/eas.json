@@ -1,0 +1,12 @@
+{
+  "cli": {
+    "appVersionSource": "local"
+  },
+  "build": {
+    "release": {
+      "android": {
+        "buildType": "apk"
+      }
+    }
+  }
+}

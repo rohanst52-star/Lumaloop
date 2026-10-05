@@ -1,0 +1,1318 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: API specification
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: storage
+    description: Authenticated listing photo storage
+  - name: updates
+    description: Direct Android APK update channel
+  - name: products
+    description: Marketplace discovery and listings
+  - name: users
+    description: Profiles and social trust
+  - name: offers
+    description: Offers and negotiations
+  - name: orders
+    description: Purchases and delivery progress
+  - name: conversations
+    description: Buyer and seller messaging
+  - name: notifications
+    description: Private marketplace activity alerts
+  - name: moderation
+    description: Reports and blocking
+  - name: commerce
+    description: Checkout, buyer protection, boosts, pickup and listing assistance
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+  /updates/android/manifest:
+    get:
+      operationId: getAndroidUpdateManifest
+      tags: [updates]
+      summary: Get the latest trusted Android APK release
+      description: Returns public metadata for the latest direct Android update. The server only serves a validated manifest configured by the operator.
+      responses:
+        "200":
+          description: Latest Android release metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AndroidUpdateManifest"
+        "404":
+          description: No Android release has been configured
+        "503":
+          description: Update service is not configured or its manifest is invalid
+  /products:
+    get:
+      operationId: listProducts
+      tags: [products]
+      summary: Browse marketplace listings
+      parameters:
+        - $ref: "#/components/parameters/Search"
+        - $ref: "#/components/parameters/Category"
+        - $ref: "#/components/parameters/Sort"
+        - $ref: "#/components/parameters/Limit"
+        - name: pickup
+          in: query
+          schema: { type: boolean }
+        - name: latitudeE6
+          in: query
+          schema: { type: integer, description: Coarse pickup search latitude scaled by 1e6 }
+        - name: longitudeE6
+          in: query
+          schema: { type: integer, description: Coarse pickup search longitude scaled by 1e6 }
+        - name: radiusKm
+          in: query
+          schema: { type: number, minimum: 1, maximum: 100 }
+      responses:
+        "200":
+          description: Product results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductList"
+    post:
+      operationId: createProduct
+      tags: [products]
+      summary: Create a marketplace listing
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProductInput"
+      responses:
+        "201":
+          description: Created listing
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+  /storage/uploads/request-url:
+    post:
+      operationId: requestListingPhotoUpload
+      tags: [storage]
+      summary: Prepare an authenticated listing photo upload
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ListingPhotoUploadRequest"
+      responses:
+        "200":
+          description: A short-lived direct upload URL and the resulting object path
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListingPhotoUploadTicket"
+        "400":
+          description: Unsupported image metadata
+        "401":
+          description: Authentication required
+        "503":
+          description: Photo storage is temporarily unavailable
+  /storage/uploads/cleanup:
+    post:
+      operationId: cleanupListingPhotoUploads
+      tags: [storage]
+      summary: Remove unclaimed listing photos from a failed publication attempt
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CleanupListingPhotoUploadsInput"
+      responses:
+        "200":
+          description: Cleanup result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CleanupListingPhotoUploadsResult"
+        "400":
+          description: Invalid or unowned object paths
+        "401":
+          description: Authentication required
+  /products/{productId}:
+    get:
+      operationId: getProduct
+      tags: [products]
+      summary: Get a listing
+      parameters:
+        - $ref: "#/components/parameters/ProductId"
+      responses:
+        "200":
+          description: Listing
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+  /commerce/fees:
+    get:
+      operationId: calculateBuyerProtectionFee
+      tags: [commerce]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: price
+          in: query
+          required: true
+          schema: { type: number, minimum: 0.01 }
+      responses:
+        "200": { description: Server-calculated marketplace fees, content: { application/json: { schema: { $ref: "#/components/schemas/FeeQuote" } } } }
+  /commerce/offer-range/{productId}:
+    get:
+      operationId: getOfferRange
+      tags: [commerce]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: "#/components/parameters/ProductId" }]
+      responses:
+        "200": { description: Suggested offer range, content: { application/json: { schema: { $ref: "#/components/schemas/OfferRange" } } } }
+  /commerce/ai/listing-analysis:
+    post:
+      operationId: analyzeListingPhotos
+      tags: [commerce]
+      security: [{ bearerAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/PhotoAnalysisInput" } } } }
+      responses:
+        "200": { description: Draft-only AI listing analysis for the authenticated user's uploaded photos, content: { application/json: { schema: { $ref: "#/components/schemas/ListingAnalysis" } } } }
+  /commerce/ai/sell-everything:
+    post:
+      operationId: analyzeSellEverything
+      tags: [commerce]
+      security: [{ bearerAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SellEverythingInput" } } } }
+      responses:
+        "200":
+          description: Draft analyses for the authenticated user's uploaded photos; this never creates listings
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/ListingAnalysis" }
+  /commerce/listings/batch:
+    post:
+      operationId: createListingsBatch
+      tags: [commerce]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/BatchCreateListingsInput" } } } }
+      responses:
+        "201": { description: Created unpublished listings, content: { application/json: { schema: { $ref: "#/components/schemas/ProductList" } } } }
+  /commerce/checkout/listing:
+    post:
+      operationId: createListingCheckout
+      tags: [commerce]
+      security: [{ bearerAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CheckoutListingInput" } } } }
+      responses:
+        "201": { description: Stripe Checkout session, content: { application/json: { schema: { $ref: "#/components/schemas/CheckoutSession" } } } }
+  /commerce/boosts:
+    post:
+      operationId: createBoostCheckout
+      tags: [commerce]
+      security: [{ bearerAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/BoostInput" } } } }
+      responses:
+        "201": { description: Stripe Checkout session, content: { application/json: { schema: { $ref: "#/components/schemas/CheckoutSession" } } } }
+  /commerce/protection-cases:
+    post:
+      operationId: createBuyerProtectionCase
+      tags: [commerce]
+      security: [{ bearerAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ProtectionCaseInput" } } } }
+      responses:
+        "201": { description: Opened case, content: { application/json: { schema: { $ref: "#/components/schemas/ProtectionCase" } } } }
+  /commerce/balance:
+    get:
+      operationId: getSellerBalance
+      tags: [commerce]
+      summary: Get the current seller's server-confirmed balance and payout history
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Seller balance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SellerBalance"
+  /commerce/balance/withdraw:
+    post:
+      operationId: requestBalanceWithdrawal
+      tags: [commerce]
+      summary: Withdraw all server-confirmed available funds
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: Existing idempotent withdrawal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PayoutRecord"
+        "201":
+          description: Completed withdrawal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PayoutRecord"
+        "409":
+          description: No server-confirmed funds are available
+  /commerce/payout-account:
+    get:
+      operationId: getSellerPayoutAccount
+      tags: [commerce]
+      summary: Get Stripe Connect Express onboarding and payout status for the current seller
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Seller payout account status, content: { application/json: { schema: { $ref: "#/components/schemas/SellerPayoutAccount" } } } }
+  /commerce/payout-account/onboard:
+    post:
+      operationId: startSellerPayoutOnboarding
+      tags: [commerce]
+      summary: Create or resume Stripe Connect Express onboarding
+      security: [{ bearerAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/PayoutOnboardingInput" } } } }
+      responses:
+        "201": { description: Stripe-hosted onboarding link and current account state, content: { application/json: { schema: { $ref: "#/components/schemas/SellerPayoutOnboarding" } } } }
+  /home:
+    get:
+      operationId: getHomeFeed
+      tags: [products]
+      summary: Get curated marketplace home feed
+      responses:
+        "200":
+          description: Curated feed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HomeFeed"
+  /me:
+    get:
+      operationId: getCurrentUserProfile
+      tags: [users]
+      summary: Get the signed-in user's marketplace profile
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Current user profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+        "401":
+          description: Authentication required
+  /users/{userId}:
+    get:
+      operationId: getUserProfile
+      tags: [users]
+      summary: Get a seller profile
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "200":
+          description: Seller profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+  /orders/{orderId}/review:
+    post:
+      operationId: createReview
+      tags: [orders]
+      summary: Leave a verified seller review for a delivered order
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/OrderId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReviewInput"
+      responses:
+        "201":
+          description: Created review
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Review"
+        "400":
+          description: Invalid review or order is not complete
+        "401":
+          description: Authentication required
+        "403":
+          description: Buyers cannot review their own listing
+        "404":
+          description: Order not found for the current buyer
+        "409":
+          description: This order has already been reviewed
+  /favourites:
+    get:
+      operationId: listFavourites
+      tags: [users]
+      summary: List saved listings
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Saved listings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductList"
+  /favourites/{productId}:
+    post:
+      operationId: addFavourite
+      tags: [users]
+      summary: Save a listing
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ProductId"
+      responses:
+        "204":
+          description: Saved
+    delete:
+      operationId: removeFavourite
+      tags: [users]
+      summary: Remove a saved listing
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ProductId"
+      responses:
+        "204":
+          description: Removed
+  /notifications:
+    get:
+      operationId: listNotifications
+      tags: [notifications]
+      summary: List notifications for the current user
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Notifications
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Notification"
+  /notifications/{notificationId}/read:
+    patch:
+      operationId: markNotificationRead
+      tags: [notifications]
+      summary: Mark one notification as read
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/NotificationId"
+      responses:
+        "200":
+          description: Updated notification
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Notification"
+  /notifications/read-all:
+    patch:
+      operationId: markAllNotificationsRead
+      tags: [notifications]
+      summary: Mark all notifications as read
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Number of updated notifications
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [updated]
+                properties:
+                  updated: { type: number }
+  /offers:
+    post:
+      operationId: createOffer
+      tags: [offers]
+      summary: Make an offer on a listing
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOfferInput"
+      responses:
+        "201":
+          description: Created offer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Offer"
+  /offers/mine:
+    get:
+      operationId: listMyOffers
+      tags: [offers]
+      summary: List offers for the current user
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Offers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Offer"
+  /orders:
+    get:
+      operationId: listOrders
+      tags: [orders]
+      summary: List current user's orders
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Orders
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Order"
+    post:
+      operationId: createOrder
+      tags: [orders]
+      summary: Legacy direct order endpoint (disabled; use Stripe Checkout)
+      deprecated: true
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOrderInput"
+      responses:
+        "409":
+          description: Direct order creation is disabled because orders require verified Stripe payment
+  /orders/sales:
+    get:
+      operationId: listSales
+      tags: [orders]
+      summary: List orders received by the current seller
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Sales
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Order"
+  /orders/{orderId}/status:
+    patch:
+      operationId: updateOrderStatus
+      tags: [orders]
+      summary: Update a delivery status as the seller
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/OrderId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateOrderStatusInput"
+      responses:
+        "200":
+          description: Updated order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+  /orders/{orderId}/confirm-delivery:
+    post:
+      operationId: confirmOrderDelivery
+      tags: [orders]
+      summary: Buyer confirms receipt of a shipped order and releases seller funds
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/OrderId"
+      responses:
+        "200":
+          description: Delivered order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+        "409":
+          description: Order is not currently shipped
+  /conversations:
+    get:
+      operationId: listConversations
+      tags: [conversations]
+      summary: List buyer and seller conversations
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Conversations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Conversation"
+  /conversations/{conversationId}/messages:
+    get:
+      operationId: listMessages
+      tags: [conversations]
+      summary: Read messages in a conversation
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ConversationId"
+      responses:
+        "200":
+          description: Messages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Message"
+    post:
+      operationId: sendMessage
+      tags: [conversations]
+      summary: Send a message
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ConversationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMessageInput"
+      responses:
+        "201":
+          description: Sent message
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+  /reports:
+    post:
+      operationId: createReport
+      tags: [moderation]
+      summary: Report a user or listing
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateReportInput"
+      responses:
+        "201":
+          description: Created report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Report"
+  /admin/overview:
+    get:
+      operationId: getAdminOverview
+      tags: [moderation]
+      summary: Get marketplace moderation overview
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Admin overview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminOverview"
+        "401":
+          description: Authentication required
+        "403":
+          description: Moderator access required
+  /admin/reports:
+    get:
+      operationId: listAdminReports
+      tags: [moderation]
+      summary: List reports for moderators
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/AdminReportStatus"
+      responses:
+        "200":
+          description: Reports and their moderation audit history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AdminReport"
+        "401":
+          description: Authentication required
+        "403":
+          description: Moderator access required
+  /admin/reports/{reportId}:
+    patch:
+      operationId: updateAdminReport
+      tags: [moderation]
+      summary: Update a report status
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ReportId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAdminReportInput"
+      responses:
+        "200":
+          description: Updated report with audit history
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminReport"
+        "401":
+          description: Authentication required
+        "403":
+          description: Moderator access required
+        "404":
+          description: Report not found
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string, minLength: 1, maxLength: 200 }
+    Search:
+      name: search
+      in: query
+      schema: { type: string }
+    Category:
+      name: category
+      in: query
+      schema: { type: string }
+    Sort:
+      name: sort
+      in: query
+      schema:
+        type: string
+        enum: [recommended, newest, price_low, price_high]
+        default: recommended
+    Limit:
+      name: limit
+      in: query
+      schema: { type: number, minimum: 1, maximum: 50, default: 20 }
+    ProductId:
+      name: productId
+      in: path
+      required: true
+      schema: { type: string }
+    UserId:
+      name: userId
+      in: path
+      required: true
+      schema: { type: string }
+    ConversationId:
+      name: conversationId
+      in: path
+      required: true
+      schema: { type: string }
+    NotificationId:
+      name: notificationId
+      in: path
+      required: true
+      schema: { type: string }
+    OrderId:
+      name: orderId
+      in: path
+      required: true
+      schema: { type: string }
+    ReportId:
+      name: reportId
+      in: path
+      required: true
+      schema: { type: string }
+    AdminReportStatus:
+      name: status
+      in: query
+      schema:
+        type: string
+        enum: [open, reviewing, resolved, dismissed]
+  schemas:
+    ListingPhotoUploadRequest:
+      type: object
+      required: [contentType, size]
+      properties:
+        contentType:
+          type: string
+          enum: [image/jpeg, image/png, image/webp]
+        size:
+          type: number
+          minimum: 1
+          maximum: 15000000
+    ListingPhotoUploadTicket:
+      type: object
+      required: [uploadUrl, objectPath]
+      properties:
+        uploadUrl: { type: string, pattern: "^https://" }
+        objectPath: { type: string, pattern: "^/api/storage/objects/uploads/" }
+    CleanupListingPhotoUploadsInput:
+      type: object
+      required: [objectPaths]
+      properties:
+        objectPaths:
+          type: array
+          minItems: 1
+          maxItems: 10
+          items: { type: string }
+    CleanupListingPhotoUploadsResult:
+      type: object
+      required: [deleted, deletedPaths]
+      properties:
+        deleted: { type: number, minimum: 0, maximum: 10 }
+        deletedPaths:
+          type: array
+          maxItems: 10
+          items: { type: string }
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+    AndroidUpdateManifest:
+      type: object
+      required: [platform, packageName, version, versionCode, apkUrl, releaseNotes, mandatory, sha256]
+      properties:
+        platform:
+          type: string
+          enum: [android]
+        packageName:
+          type: string
+          description: Android application ID. Must match the installed app.
+          minLength: 1
+        version:
+          type: string
+          description: Human-readable semantic version.
+          minLength: 1
+        versionCode:
+          type: number
+          minimum: 1
+          multipleOf: 1
+        apkUrl:
+          type: string
+          description: HTTPS URL for the APK.
+          pattern: "^https://.+"
+        releaseNotes:
+          type: string
+          maxLength: 5000
+        mandatory:
+          type: boolean
+        sha256:
+          type: string
+          description: Lowercase SHA-256 digest of the complete APK.
+          pattern: "^[a-fA-F0-9]{64}$"
+        sizeBytes:
+          type: number
+          minimum: 1
+          multipleOf: 1
+        publishedAt:
+          type: string
+          format: date-time
+    Product:
+      type: object
+      required: [id, title, price, currency, condition, category, location, images, seller, createdAt, favouriteCount]
+      properties:
+        id: { type: string }
+        title: { type: string }
+        price: { type: number }
+        currency: { type: string }
+        condition: { type: string }
+        category: { type: string }
+        description: { type: string }
+        location: { type: string }
+        images:
+          type: array
+          items: { type: string }
+        seller:
+          $ref: "#/components/schemas/UserProfile"
+        createdAt: { type: string, format: date-time }
+        favouriteCount: { type: number }
+        pickupAvailable: { type: boolean }
+        pickupArea: { type: ["string", "null"] }
+        sellerAvailability:
+          type: array
+          items: { type: string }
+    ProductList:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/Product" }
+        total: { type: number }
+    HomeFeed:
+      type: object
+      required: [featured, recommended, categories]
+      properties:
+        featured:
+          type: array
+          items: { $ref: "#/components/schemas/Product" }
+        recommended:
+          type: array
+          items: { $ref: "#/components/schemas/Product" }
+        categories:
+          type: array
+          items: { $ref: "#/components/schemas/Category" }
+    Category:
+      type: object
+      required: [id, name, count]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        count: { type: number }
+        image: { type: string }
+    UserProfile:
+      type: object
+      required: [id, name, rating, reviewCount, reviews, avatar, location, joinedAt]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        rating: { type: number }
+        reviewCount: { type: number }
+        reviews:
+          type: array
+          items:
+            $ref: "#/components/schemas/Review"
+        avatar: { type: string }
+        location: { type: string }
+        joinedAt: { type: string, format: date-time }
+        bio: { type: string }
+    Offer:
+      type: object
+      required: [id, productId, productTitle, amount, status, fromUser, createdAt]
+      properties:
+        id: { type: string }
+        productId: { type: string }
+        productTitle: { type: string }
+        amount: { type: number }
+        status:
+          type: string
+          enum: [pending, accepted, declined, countered, expired]
+        fromUser: { $ref: "#/components/schemas/UserProfile" }
+        createdAt: { type: string, format: date-time }
+    Order:
+      type: object
+      required: [id, product, amount, status, placedAt, deliveryEstimate]
+      properties:
+        id: { type: string }
+        product: { $ref: "#/components/schemas/Product" }
+        amount: { type: number }
+        buyerProtectionFee: { type: number }
+        status:
+          type: string
+          enum: [paid, packed, shipped, delivered, cancelled]
+        placedAt: { type: string, format: date-time }
+        deliveryEstimate: { type: string }
+        trackingCode: { type: string }
+        review:
+          anyOf:
+            - $ref: "#/components/schemas/Review"
+            - type: "null"
+    Review:
+      type: object
+      required: [id, rating, body, reviewerName, reviewerAvatar, productTitle, createdAt]
+      properties:
+        id: { type: string }
+        rating: { type: number, minimum: 1, maximum: 5, multipleOf: 1 }
+        body: { type: string }
+        reviewerName: { type: string }
+        reviewerAvatar: { type: string }
+        productTitle: { type: string }
+        createdAt: { type: string, format: date-time }
+    ReviewInput:
+      type: object
+      required: [rating, body]
+      properties:
+        rating: { type: number, minimum: 1, maximum: 5, multipleOf: 1 }
+        body: { type: string, minLength: 1, maxLength: 1000 }
+    Conversation:
+      type: object
+      required: [id, participant, productTitle, lastMessage, updatedAt, unreadCount]
+      properties:
+        id: { type: string }
+        participant: { $ref: "#/components/schemas/UserProfile" }
+        productTitle: { type: string }
+        lastMessage: { type: string }
+        updatedAt: { type: string, format: date-time }
+        unreadCount: { type: number }
+    Message:
+      type: object
+      required: [id, conversationId, body, senderId, createdAt]
+      properties:
+        id: { type: string }
+        conversationId: { type: string }
+        body: { type: string }
+        senderId: { type: string }
+        createdAt: { type: string, format: date-time }
+    Notification:
+      type: object
+      required: [id, type, title, body, productId, conversationId, offerId, orderId, createdAt, readAt]
+      properties:
+        id: { type: string }
+        type:
+          type: string
+          enum: [offer, message, favourite, order, delivery]
+        title: { type: string }
+        body: { type: string }
+        productId: { type: ["string", "null"] }
+        conversationId: { type: ["string", "null"] }
+        offerId: { type: ["string", "null"] }
+        orderId: { type: ["string", "null"] }
+        createdAt: { type: string, format: date-time }
+        readAt: { type: ["string", "null"], format: date-time }
+    Report:
+      type: object
+      required: [id, targetType, targetId, reason, status, createdAt]
+      properties:
+        id: { type: string }
+        targetType:
+          type: string
+          enum: [user, listing]
+        targetId: { type: string }
+        reason: { type: string }
+        status:
+          type: string
+          enum: [open, reviewing, resolved, dismissed]
+        createdAt: { type: string, format: date-time }
+    CreateProductInput:
+      type: object
+      required: [title, price, condition, category, description, location, images]
+      properties:
+        title: { type: string, minLength: 3 }
+        price: { type: number, minimum: 0 }
+        condition: { type: string }
+        category: { type: string }
+        description: { type: string }
+        location: { type: string }
+        images:
+          type: array
+          minItems: 1
+          items: { type: string }
+        pickupAvailable: { type: boolean }
+        pickupArea: { type: string, maxLength: 120 }
+        latitudeE6: { type: number }
+        longitudeE6: { type: number }
+        sellerAvailability: { type: array, maxItems: 14, items: { type: string } }
+        keywords: { type: array, maxItems: 12, items: { type: string } }
+    CreateOfferInput:
+      type: object
+      required: [productId, amount]
+      properties:
+        productId: { type: string }
+        amount: { type: number, minimum: 0 }
+    CreateOrderInput:
+      type: object
+      required: [productId]
+      properties:
+        productId: { type: string }
+    CreateMessageInput:
+      type: object
+      required: [body]
+      properties:
+        body: { type: string, minLength: 1 }
+    UpdateOrderStatusInput:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [paid, packed, shipped, delivered, cancelled]
+        trackingCode: { type: string }
+        deliveryEstimate: { type: string }
+    CreateReportInput:
+      type: object
+      required: [targetType, targetId, reason]
+      properties:
+        targetType:
+          type: string
+          enum: [user, listing]
+        targetId: { type: string }
+        reason: { type: string }
+    AdminOverview:
+      type: object
+      required: [counts]
+      properties:
+        counts:
+          $ref: "#/components/schemas/AdminCounts"
+    AdminCounts:
+      type: object
+      required: [users, listings, reports, orders, openReports]
+      properties:
+        users: { type: number }
+        listings: { type: number }
+        reports: { type: number }
+        orders: { type: number }
+        openReports: { type: number }
+    AdminReport:
+      type: object
+      required: [id, reporterId, targetType, targetId, reason, status, createdAt, audit]
+      properties:
+        id: { type: string }
+        reporterId: { type: string }
+        targetType:
+          type: string
+          enum: [user, listing]
+        targetId: { type: string }
+        reason: { type: string }
+        status:
+          type: string
+          enum: [open, reviewing, resolved, dismissed]
+        createdAt: { type: string, format: date-time }
+        resolvedBy: { type: ["string", "null"] }
+        resolvedAt: { type: ["string", "null"], format: date-time }
+        audit:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminAuditEntry"
+    AdminAuditEntry:
+      type: object
+      required: [id, moderatorId, action, previousStatus, newStatus, createdAt]
+      properties:
+        id: { type: string }
+        moderatorId: { type: string }
+        action: { type: string }
+        previousStatus:
+          type: string
+          enum: [open, reviewing, resolved, dismissed]
+        newStatus:
+          type: string
+          enum: [open, reviewing, resolved, dismissed]
+        createdAt: { type: string, format: date-time }
+    UpdateAdminReportInput:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [open, reviewing, resolved, dismissed]
+    FeeQuote:
+      type: object
+      required: [listingPrice, sellerFee, buyerProtectionFee, total]
+      properties:
+        listingPrice: { type: number }
+        sellerFee: { type: number, description: Standard seller fee is always zero }
+        buyerProtectionFee: { type: number }
+        total: { type: number }
+    OfferRange:
+      type: object
+      required: [minimum, recommended, maximum]
+      properties:
+        minimum: { type: number }
+        recommended: { type: number }
+        maximum: { type: number }
+    SellerBalance:
+      type: object
+      required: [currency, grossSales, platformFees, pendingFunds, availableFunds, paidOutFunds, reversedPendingFunds, payoutStatus, payoutAccount, sales, payouts]
+      properties:
+        currency: { type: string, enum: [GBP] }
+        grossSales: { type: number }
+        platformFees: { type: number }
+        pendingFunds: { type: number }
+        availableFunds: { type: number }
+        paidOutFunds: { type: number }
+        reversedPendingFunds: { type: number, description: "Partial Stripe transfer reversals awaiting reconciliation; not available or paid out." }
+        payoutStatus:
+          type: string
+          enum: [no_funds, pending, ready]
+        payoutAccount: { $ref: "#/components/schemas/SellerPayoutAccount" }
+        sales:
+          type: array
+          items:
+            $ref: "#/components/schemas/SellerBalanceSale"
+        payouts:
+          type: array
+          items:
+            $ref: "#/components/schemas/PayoutRecord"
+    SellerBalanceSale:
+      type: object
+      required: [id, orderId, title, grossAmount, platformFee, netAmount, status, orderStatus, createdAt, availableAt, paidAt]
+      properties:
+        id: { type: string }
+        orderId: { type: string }
+        title: { type: string }
+        grossAmount: { type: number }
+        platformFee: { type: number }
+        netAmount: { type: number }
+        status:
+          type: string
+          enum: [pending, available, reserved, paid_out, cancelled, verification_hold]
+        orderStatus:
+          type: string
+          enum: [paid, packed, shipped, delivered, cancelled]
+        createdAt: { type: string, format: date-time }
+        availableAt: { type: ["string", "null"], format: date-time }
+        paidAt: { type: ["string", "null"], format: date-time }
+    PayoutRecord:
+      type: object
+      required: [id, amount, status, providerTransferId, failureReason, reversedAmount, createdAt, completedAt]
+      properties:
+        id: { type: string }
+        amount: { type: number }
+        status:
+          type: string
+          enum: [reserved, paid, failed, reversed, partially_reversed]
+        providerTransferId: { type: [string, "null"] }
+        failureReason: { type: [string, "null"] }
+        reversedAmount: { type: number }
+        createdAt: { type: string, format: date-time }
+        completedAt: { type: ["string", "null"], format: date-time }
+    SellerPayoutAccount:
+      type: object
+      required: [provider, accountId, status, payoutsEnabled, detailsSubmitted, disabledReason]
+      properties:
+        provider: { type: string, enum: [stripe] }
+        accountId: { type: [string, "null"] }
+        status: { type: string, enum: [not_started, pending, active, disabled] }
+        payoutsEnabled: { type: boolean }
+        detailsSubmitted: { type: boolean }
+        disabledReason: { type: [string, "null"] }
+    SellerPayoutOnboarding:
+      allOf:
+        - $ref: "#/components/schemas/SellerPayoutAccount"
+        - type: object
+          required: [onboardingUrl]
+          properties:
+            onboardingUrl: { type: string }
+    PayoutOnboardingInput:
+      type: object
+      required: [refreshUrl, returnUrl]
+      properties:
+        refreshUrl: { type: string, description: "HTTPS URL, or the fixed lumaloop://balance native return URL (localhost is accepted for development)." }
+        returnUrl: { type: string, description: "HTTPS URL, or the fixed lumaloop://balance native return URL (localhost is accepted for development)." }
+    PhotoAnalysisInput:
+      type: object
+      required: [images]
+      properties:
+        images:
+          type: array
+          minItems: 1
+          maxItems: 6
+          description: Object paths returned by the authenticated photo-upload endpoint
+          items: { type: string, pattern: "^/api/storage/objects/uploads/" }
+    ListingAnalysis:
+      type: object
+      required: [title, description, category, condition, keywords, prices]
+      properties:
+        title: { type: string }
+        description: { type: string }
+        category: { type: string }
+        condition: { type: string }
+        keywords: { type: array, items: { type: string } }
+        prices:
+          type: object
+          required: [sellFaster, recommended, maximum]
+          properties:
+            sellFaster: { type: number }
+            recommended: { type: number }
+            maximum: { type: number }
+    SellEverythingInput:
+      type: object
+      required: [groups]
+      properties:
+        groups:
+          type: array
+          minItems: 1
+          maxItems: 10
+          items:
+            type: array
+            minItems: 1
+            maxItems: 6
+            items: { type: string, pattern: "^/api/storage/objects/uploads/" }
+    BatchCreateListingsInput:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items: { $ref: "#/components/schemas/CreateProductInput" }
+    CheckoutListingInput:
+      type: object
+      required: [productId, successUrl, cancelUrl]
+      properties:
+        productId: { type: string }
+        successUrl: { type: string }
+        cancelUrl: { type: string }
+    BoostInput:
+      type: object
+      required: [productId, tier, successUrl, cancelUrl]
+      properties:
+        productId: { type: string }
+        tier: { type: string, enum: [basic, plus, premium] }
+        successUrl: { type: string }
+        cancelUrl: { type: string }
+    CheckoutSession:
+      type: object
+      required: [id, url]
+      properties:
+        id: { type: string }
+        url: { type: string }
+    ProtectionCaseInput:
+      type: object
+      required: [orderId, reason, details]
+      properties:
+        orderId: { type: string }
+        reason: { type: string, enum: [non_delivery, misrepresentation, counterfeit] }
+        details: { type: string, minLength: 10, maxLength: 4000 }
+    ProtectionCase:
+      type: object
+      required: [id, orderId, reason, details, status, createdAt]
+      properties:
+        id: { type: string }
+        orderId: { type: string }
+        reason: { type: string }
+        details: { type: string }
+        status: { type: string }
+        createdAt: { type: string, format: date-time }
+
